@@ -2,7 +2,9 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- Everything is inline; this policy guarantees the page can never make a network request. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; form-action 'none'; base-uri 'none'" />
     <title>QuickPass</title>
     <style>
 :root {
@@ -38,10 +40,13 @@ body {
 
 #root {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 20px;
+  padding: max(20px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right))
+    max(20px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
 }
 
 .window {
@@ -221,6 +226,10 @@ input[type="radio"] {
   margin-bottom: 10px;
 }
 
+.length-heading {
+  margin: 0 0 8px;
+}
+
 .radio-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(160px, 1fr));
@@ -259,6 +268,16 @@ input[type="radio"] {
   font-weight: 600;
 }
 
+.status-warning {
+  margin-top: 6px;
+  color: #ff7b7b;
+  font-weight: 600;
+}
+
+.status-warning .warning-icon {
+  margin-right: 6px;
+}
+
 @keyframes card-in {
   from {
     opacity: 0;
@@ -273,6 +292,13 @@ input[type="radio"] {
 @media (max-width: 760px) {
   .window {
     padding: 14px;
+  }
+
+  .field-input,
+  select,
+  button {
+    font-size: 16px;
+    padding: 12px;
   }
 
   .title-row {
@@ -340,7 +366,15 @@ input[type="radio"] {
 
         <div class="grid">
           <label class="field-label" for="siteName">Site Name:</label>
-          <input id="siteName" class="field-input" placeholder="e.g. github, github/work, or user@example.com" />
+          <input
+            id="siteName"
+            class="field-input"
+            placeholder="e.g. github, github/work, or user@example.com"
+            autocomplete="off"
+            autocapitalize="none"
+            autocorrect="off"
+            spellcheck="false"
+          />
           <div></div>
 
           <label class="field-label" for="masterPassword">Your Master Password:</label>
@@ -349,7 +383,7 @@ input[type="radio"] {
             class="field-input"
             type="password"
             placeholder="mysupersecretpassword"
-            autocomplete="new-password"
+            autocomplete="current-password"
             spellcheck="false"
             autocapitalize="off"
             autocorrect="off"
@@ -388,7 +422,8 @@ input[type="radio"] {
             Allow all special characters
           </label>
 
-          <div class="radio-grid">
+          <div class="field-label length-heading" id="length-heading">Change password output length:</div>
+          <div class="radio-grid" role="radiogroup" aria-labelledby="length-heading">
             <label><input type="radio" name="chars" value="8" />8 Characters</label>
             <label><input type="radio" name="chars" value="10" />10 Characters</label>
             <label><input type="radio" name="chars" value="15" />15 Characters</label>
@@ -406,6 +441,9 @@ input[type="radio"] {
         </div>
 
         <div id="status" class="status">Welcome to QuickPass</div>
+        <div id="clipboardWarning" class="status-warning hidden" role="status">
+          <span class="warning-icon" aria-hidden="true">&#9888;&#xFE0E;</span>Always Clear Clipboard once done
+        </div>
       </div>
     </div>
 
@@ -735,6 +773,7 @@ async function passGen(masterKey, siteName, type, length, version) {
     copyButton: document.getElementById('copyButton'),
     clearButton: document.getElementById('clearButton'),
     status: document.getElementById('status'),
+    clipboardWarning: document.getElementById('clipboardWarning'),
   };
 
   var charRadios = Array.from(document.querySelectorAll('input[name="chars"]'));
@@ -742,6 +781,7 @@ async function passGen(masterKey, siteName, type, length, version) {
   var state = {
     passwordLength: 20,
     copied: false,
+    clipboardPending: false,
   };
 
   function syncExtrasVisibility() {
@@ -800,6 +840,34 @@ async function passGen(masterKey, siteName, type, length, version) {
     el.status.textContent = text;
   }
 
+  function setClipboardPending(pending) {
+    state.clipboardPending = pending;
+    el.clipboardWarning.classList.toggle('hidden', !pending);
+  }
+
+  async function clearClipboardContents() {
+    await writeClipboardText('');
+    setClipboardPending(false);
+    el.clearButton.disabled = true;
+    setStatus('Password Cleared from Clipboard');
+  }
+
+  function onEdit() {
+    if (state.clipboardPending) {
+      clearClipboardContents();
+    }
+    clearPasswordField();
+  }
+
+  function onVisibilityChange() {
+    if (document.hidden) {
+      el.showMaster.checked = false;
+      el.masterPassword.type = 'password';
+      el.showSitePassword.checked = false;
+      el.sitePassword.type = 'password';
+    }
+  }
+
   async function generate() {
     var normalizedSiteName = el.siteName.value.trim().toLowerCase();
     var mode = el.specialChars.checked ? (el.fullSpecialChars.checked ? 1 : 2) : 0;
@@ -824,15 +892,14 @@ async function passGen(masterKey, siteName, type, length, version) {
     await writeClipboardText(el.sitePassword.value);
     el.clearButton.disabled = false;
     state.copied = true;
+    setClipboardPending(true);
     el.copyButton.textContent = 'Copied to Clipboard';
     setStatus('Password Copied to Clipboard');
   }
 
   async function clearClipboard() {
-    await writeClipboardText('');
+    await clearClipboardContents();
     reset();
-    el.clearButton.disabled = true;
-    setStatus('Password Cleared from Clipboard');
   }
 
   function initVersionSelect() {
@@ -848,12 +915,12 @@ async function passGen(masterKey, siteName, type, length, version) {
   function bindEvents() {
     el.siteName.addEventListener('input', function() {
       el.siteName.value = el.siteName.value.toLowerCase();
-      clearPasswordField();
+      onEdit();
     });
 
-    el.masterPassword.addEventListener('input', function() {
-      clearPasswordField();
-    });
+    el.masterPassword.addEventListener('input', onEdit);
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
 
     el.showMaster.addEventListener('change', function() {
       el.masterPassword.type = el.showMaster.checked ? 'text' : 'password';
@@ -870,10 +937,10 @@ async function passGen(masterKey, siteName, type, length, version) {
       } else {
         el.fullSpecialChars.disabled = false;
       }
-      clearPasswordField();
+      onEdit();
     });
 
-    el.fullSpecialChars.addEventListener('change', clearPasswordField);
+    el.fullSpecialChars.addEventListener('change', onEdit);
 
     el.extrasVisible.addEventListener('change', syncExtrasVisibility);
     el.extrasVisible.addEventListener('input', syncExtrasVisibility);
@@ -883,12 +950,12 @@ async function passGen(masterKey, siteName, type, length, version) {
       radio.addEventListener('change', function() {
         if (radio.checked) {
           state.passwordLength = parseInt(radio.value, 10);
-          clearPasswordField();
+          onEdit();
         }
       });
     });
 
-    el.version.addEventListener('change', clearPasswordField);
+    el.version.addEventListener('change', onEdit);
 
     el.generateButton.addEventListener('click', async function() {
       await generate();

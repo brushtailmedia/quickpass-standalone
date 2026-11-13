@@ -4,7 +4,8 @@ A single-file, zero-dependency, fully offline, deterministic password generator.
 
 > Download pre-built file releases from **[Releases](https://github.com/brushtailmedia/quickpass-standalone/releases)**, or copy/download **[index.html](index.html)** directly — use the download raw file button (top right) to save it.
 
-Desktop app version: [brushtailmedia/quickpass-desktop](https://github.com/brushtailmedia/quickpass-desktop)
+Desktop version: [brushtailmedia/quickpass-desktop](https://github.com/brushtailmedia/quickpass-desktop)
+Mobile version: [brushtailmedia/quickpass-app](https://github.com/brushtailmedia/quickpass-app)
 
 ![QuickPass Standalone](docs/images/quickpass-standalone-main.webp)
 
@@ -51,8 +52,18 @@ No Node.js, no npm, no server, no internet connection.
 - **Nothing leaves your machine.** No network requests, no analytics, no telemetry.
 - **Nothing is stored.** No cookies, no localStorage, no sessionStorage, no IndexedDB.
 - **Master password lives in memory only**, and only while the page is open.
-- **Clipboard is cleared explicitly** via the Clear Clipboard button.
+- **Clipboard is cleared** by the Clear Clipboard button, by editing any field after a copy, or by the next copy. Closing the tab does not clear it, so a red "Always Clear Clipboard once done" line stays visible while a copied password is outstanding.
+- **Both "show" toggles turn off** when the page is hidden (tab switch, or switching apps on a phone). The form is kept.
+- **Content Security Policy** `default-src 'none'` is set in the page itself, so it cannot make a network request even if someone edits the file later.
 - **All cryptography runs client-side** using the browser's built-in Web Crypto API (SHA-256) and a pure JavaScript BLAKE2S implementation.
+
+### Testing
+
+`index.html` has no build step, but its password core is checked against the same deterministic vectors as the desktop and mobile apps:
+
+```bash
+node scripts/vectors.test.mjs
+```
 
 ### Clipboard on `file://` URLs
 
@@ -63,7 +74,11 @@ Browsers restrict the modern Clipboard API (`navigator.clipboard`) to secure con
 - **Clipboard exposure:** Other apps or OS clipboard history tools may retain copied passwords. Clear after use.
 - **Device compromise:** Keyloggers, malware, or malicious browser extensions bypass any in-app protection.
 - **Naming consistency:** The same site name must be entered every time. `github` and `GitHub` produce different passwords (the app lowercases automatically, but trailing spaces or alternate naming won't match).
-- **File integrity:** If someone tampers with this file, the crypto could be altered silently. Verify the source if you didn't download it yourself.
+- **File integrity:** If someone tampers with this file, the crypto could be altered silently. Verify the source if you didn't download it yourself:
+
+```bash
+shasum -a 256 -c SHA256SUMS.txt
+```
 
 ## License
 
